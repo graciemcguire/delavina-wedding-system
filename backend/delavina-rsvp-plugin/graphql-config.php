@@ -129,57 +129,44 @@ class WeddingRSVPGraphQL {
     }
 
     /**
-     * Register custom queries
+     * Register custom queries and modify default search
      */
     public function register_custom_queries() {
         
-        // Search Guests Query
-        register_graphql_field('RootQuery', 'searchGuests', [
-            'type' => ['list_of' => 'Guest'],
-            'description' => 'Search for guests by name',
-            'args' => [
-                'searchTerm' => [
-                    'type' => 'String',
-                    'description' => 'The search term to match against guest names'
-                ]
-            ],
-            'resolve' => function($source, $args, $context, $info) {
-                
-                if (empty($args['searchTerm'])) {
-                    return [];
-                }
-
-                $search_term = sanitize_text_field($args['searchTerm']);
-                
-                // Search by name, plus one name, or full name
-                $meta_query = [
-                    'relation' => 'OR',
-                    [
-                        'key' => 'name',
-                        'value' => $search_term,
-                        'compare' => 'LIKE'
-                    ],
-                    [
-                        'key' => 'plus_one_name',
-                        'value' => $search_term,
-                        'compare' => 'LIKE'
-                    ]
-                ];
-
-                // Also search post titles (full names)
-                $query_args = [
-                    'post_type' => 'guest',
-                    'post_status' => 'publish',
-                    'posts_per_page' => 20,
-                    'meta_query' => $meta_query,
-                    's' => $search_term
-                ];
-
-                $guests = get_posts($query_args);
-                
-                return $guests;
+        // Hook into WPGraphQL guest queries to enhance search
+        add_filter('graphql_PostObjectsConnectionResolver_get_query_args', function($query_args, $source, $args, $context, $info) {
+            
+            // Only enhance guest post queries with search
+            if ($query_args['post_type'] !== 'guest' || empty($args['where']['search'])) {
+                return $query_args;
             }
-        ]);
+            
+            $search_term = sanitize_text_field($args['where']['search']);
+            
+            // Create meta query for ACF fields
+            $meta_query = [
+                'relation' => 'OR',
+                [
+                    'key' => 'name',
+                    'value' => $search_term,
+                    'compare' => 'LIKE'
+                ],
+                [
+                    'key' => 'plus_one_name',
+                    'value' => $search_term,
+                    'compare' => 'LIKE'
+                ]
+            ];
+            
+            // Add to existing meta query or create new one
+            if (isset($query_args['meta_query'])) {
+                $query_args['meta_query'][] = $meta_query;
+            } else {
+                $query_args['meta_query'] = $meta_query;
+            }
+            
+            return $query_args;
+        }, 10, 5);
 
         // Get Guest by ID with full details
         register_graphql_field('RootQuery', 'guestDetails', [

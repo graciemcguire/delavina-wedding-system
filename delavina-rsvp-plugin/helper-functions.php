@@ -14,15 +14,15 @@ if (!defined('ABSPATH')) {
 function create_guest($guest_data) {
     
     // Validate required fields
-    if (empty($guest_data['first_name']) || empty($guest_data['last_name'])) {
-        return new WP_Error('missing_required_fields', 'First name and last name are required');
+    if (empty($guest_data['name'])) {
+        return new WP_Error('missing_required_fields', 'Name is required');
     }
 
     // Create the post
     $post_data = array(
         'post_type' => 'guest',
         'post_status' => 'publish',
-        'post_title' => trim($guest_data['first_name'] . ' ' . $guest_data['last_name']),
+        'post_title' => trim($guest_data['name']),
     );
 
     $guest_id = wp_insert_post($post_data);
@@ -32,15 +32,10 @@ function create_guest($guest_data) {
     }
 
     // Add custom fields
-    update_field('first_name', sanitize_text_field($guest_data['first_name']), $guest_id);
-    update_field('last_name', sanitize_text_field($guest_data['last_name']), $guest_id);
+    update_field('name', sanitize_text_field($guest_data['name']), $guest_id);
     
     if (!empty($guest_data['email'])) {
         update_field('email', sanitize_email($guest_data['email']), $guest_id);
-    }
-    
-    if (!empty($guest_data['phone_number'])) {
-        update_field('phone_number', sanitize_text_field($guest_data['phone_number']), $guest_id);
     }
     
     // Plus one information
@@ -104,12 +99,7 @@ function search_guests_by_name($search_term, $limit = 20) {
         'meta_query' => array(
             'relation' => 'OR',
             array(
-                'key' => 'first_name',
-                'value' => $search_term,
-                'compare' => 'LIKE'
-            ),
-            array(
-                'key' => 'last_name',
+                'key' => 'name',
                 'value' => $search_term,
                 'compare' => 'LIKE'
             )
@@ -133,11 +123,9 @@ function get_guest_details($guest_id) {
 
     $details = array(
         'id' => $guest->ID,
-        'first_name' => get_field('first_name', $guest->ID),
-        'last_name' => get_field('last_name', $guest->ID),
+        'name' => get_field('name', $guest->ID),
         'full_name' => $guest->post_title,
         'email' => get_field('email', $guest->ID),
-        'phone_number' => get_field('phone_number', $guest->ID),
         'has_plus_one' => get_field('has_plus_one', $guest->ID),
         'plus_one_name' => get_field('plus_one_name', $guest->ID),
         'party_size_total' => get_field('has_plus_one', $guest->ID) ? 2 : 1,
@@ -271,10 +259,8 @@ function export_guests_to_csv() {
     // Headers
     $csv_data[] = array(
         'ID',
-        'First Name',
-        'Last Name',
+        'Name',
         'Email',
-        'Phone Number',
         'Has Plus One',
         'Plus One Name',
         'Party Size Total',
@@ -291,10 +277,8 @@ function export_guests_to_csv() {
         
         $csv_data[] = array(
             $details['id'],
-            $details['first_name'],
-            $details['last_name'],
+            $details['name'],
             $details['email'],
-            $details['phone_number'],
             $details['has_plus_one'] ? 'Yes' : 'No',
             $details['plus_one_name'],
             $details['party_size_total'],
@@ -316,10 +300,3 @@ function validate_guest_email($email) {
     return empty($email) || is_email($email);
 }
 
-/**
- * Sanitize phone number
- */
-function sanitize_phone_number($phone) {
-    // Remove all non-numeric characters except + and -
-    return preg_replace('/[^0-9+\-\s\(\)]/', '', $phone);
-}

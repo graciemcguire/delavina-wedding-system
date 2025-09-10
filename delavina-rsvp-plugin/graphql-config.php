@@ -151,16 +151,11 @@ class WeddingRSVPGraphQL {
 
                 $search_term = sanitize_text_field($args['searchTerm']);
                 
-                // Search by first name, last name, plus one name, or full name
+                // Search by name, plus one name, or full name
                 $meta_query = [
                     'relation' => 'OR',
                     [
-                        'key' => 'first_name',
-                        'value' => $search_term,
-                        'compare' => 'LIKE'
-                    ],
-                    [
-                        'key' => 'last_name',
+                        'key' => 'name',
                         'value' => $search_term,
                         'compare' => 'LIKE'
                     ],
@@ -238,9 +233,8 @@ function add_guest_computed_fields() {
         'type' => 'String',
         'description' => 'The guest\'s full name',
         'resolve' => function($post, $args, $context, $info) {
-            $first_name = get_field('first_name', $post->ID);
-            $last_name = get_field('last_name', $post->ID);
-            return trim($first_name . ' ' . $last_name);
+            $name = get_field('name', $post->ID);
+            return trim($name);
         }
     ]);
 
@@ -249,11 +243,10 @@ function add_guest_computed_fields() {
         'type' => 'String',
         'description' => 'Display names for the entire party (guest + plus one)',
         'resolve' => function($post, $args, $context, $info) {
-            $first_name = get_field('first_name', $post->ID);
-            $last_name = get_field('last_name', $post->ID);
+            $name = get_field('name', $post->ID);
             $plus_one_name = get_field('plus_one_name', $post->ID);
             
-            $names = trim($first_name . ' ' . $last_name);
+            $names = trim($name);
             
             if (!empty($plus_one_name)) {
                 $names .= ' & ' . trim($plus_one_name);

@@ -57,5 +57,10 @@ out/
 ehthumbs.db
 Thumbs.db
 
-# Claude Code
+# Guest data (contains personal information)
+guests-*.csv
+*.csv
+
+# Claude AI files
 .claude/
+CLAUDE.md

@@ -3,7 +3,7 @@
  * Plugin Name: Delavina Wedding RSVP System
  * Plugin URI: https://delavina.com
  * Description: A complete wedding RSVP system with guest management and GraphQL API for headless WordPress
- * Version: 1.0.0
+ * Version: 2.0.0
  * Author: Delavina
  * License: GPL v2 or later
  * Text Domain: delavina-rsvp
@@ -27,10 +27,13 @@ define('DELAVINA_RSVP_PLUGIN_URL', plugin_dir_url(__FILE__));
 class DellavinaRSVPPlugin {
     
     public function __construct() {
-        add_action('init', array($this, 'init'));
+        add_action('init', array($this, 'init'), 5);
         add_action('admin_notices', array($this, 'check_dependencies'));
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
+        
+        // Load files immediately so post type registration can happen on init
+        $this->load_files();
     }
 
     /**
@@ -42,9 +45,6 @@ class DellavinaRSVPPlugin {
         if (!$this->dependencies_met()) {
             return;
         }
-
-        // Load plugin files
-        $this->load_files();
         
         // Load text domain
         load_plugin_textdomain('delavina-rsvp', false, dirname(plugin_basename(__FILE__)) . '/languages');
@@ -64,37 +64,38 @@ class DellavinaRSVPPlugin {
      * Check if all required dependencies are installed and active
      */
     private function dependencies_met() {
-        $required_plugins = array(
-            'advanced-custom-fields/acf.php' => 'Advanced Custom Fields',
-            'wp-graphql/wp-graphql.php' => 'WPGraphQL'
+        // Check if functions/classes exist instead of specific plugin paths
+        $dependencies = array(
+            'acf' => function_exists('acf'),
+            'wpgraphql' => class_exists('WPGraphQL'),
+            'wpgraphql_acf' => $this->check_wpgraphql_acf()
         );
         
-        // Check for WPGraphQL ACF - multiple possible paths
-        $wpgraphql_acf_active = false;
-        $acf_plugin_paths = array(
-            'wp-graphql-acf/wp-graphql-acf.php',
-            'wpgraphql-acf/wp-graphql-acf.php',
-            'wp-graphql-for-advanced-custom-fields/wp-graphql-acf.php'
-        );
-        
-        foreach ($acf_plugin_paths as $path) {
-            if (is_plugin_active($path)) {
-                $wpgraphql_acf_active = true;
-                break;
-            }
+        // Return true only if all dependencies are met
+        return $dependencies['acf'] && $dependencies['wpgraphql'] && $dependencies['wpgraphql_acf'];
+    }
+    
+    /**
+     * Check for WPGraphQL ACF with multiple detection methods
+     */
+    private function check_wpgraphql_acf() {
+        // Method 1: Check for functions
+        if (function_exists('wpgraphql_acf_init') || function_exists('acf_get_field_groups')) {
+            return true;
         }
         
-        if (!$wpgraphql_acf_active) {
-            $required_plugins['wp-graphql-acf'] = 'WPGraphQL for Advanced Custom Fields';
+        // Method 2: Check for classes
+        if (class_exists('WPGraphQL_ACF') || class_exists('\WPGraphQL\ACF\ACF')) {
+            return true;
         }
-
-        foreach ($required_plugins as $plugin_path => $plugin_name) {
-            if (!is_plugin_active($plugin_path)) {
-                return false;
-            }
+        
+        // Method 3: Check if WPGraphQL has ACF support loaded
+        if (class_exists('WPGraphQL') && method_exists('WPGraphQL', 'get_allowed_post_types')) {
+            // If we can access GraphQL schema and ACF fields are registered
+            return function_exists('acf_get_field_groups');
         }
-
-        return true;
+        
+        return false;
     }
 
     /**
@@ -126,8 +127,10 @@ class DellavinaRSVPPlugin {
             wp_die('This plugin requires WordPress version 5.0 or higher.');
         }
 
-        // Flush rewrite rules
-        flush_rewrite_rules();
+        // Register post type and flush rewrite rules
+        if (function_exists('delavina_flush_rewrites')) {
+            delavina_flush_rewrites();
+        }
         
         // Create default options
         add_option('delavina_rsvp_version', DELAVINA_RSVP_VERSION);
@@ -238,13 +241,12 @@ function delavina_rsvp_dashboard_page() {
  */
 function delavina_rsvp_import_page() {
     if (isset($_POST['import_guests']) && wp_verify_nonce($_POST['_wpnonce'], 'import_guests')) {
-        // Handle CSV import here
-        echo '<div class="notice notice-success"><p>Import functionality will be implemented based on your specific CSV format.</p></div>';
+        delavina_handle_csv_import();
     }
     ?>
     <div class="wrap">
         <h1>Import Guests</h1>
-        <p>Upload a CSV file with your guest list. Required columns: first_name, last_name, email, phone_number, plus_one_name (optional)</p>
+        <p>Upload a CSV file with your guest list. Expected columns: name, email, (skip), plus_one_name</p>
         
         <form method="post" enctype="multipart/form-data">
             <?php wp_nonce_field('import_guests'); ?>
@@ -260,4 +262,87 @@ function delavina_rsvp_import_page() {
         </form>
     </div>
     <?php
+}
+
+/**
+ * Handle CSV import
+ */
+function delavina_handle_csv_import() {
+    if (!isset($_FILES['guest_csv']) || $_FILES['guest_csv']['error'] !== UPLOAD_ERR_OK) {
+        echo '<div class="notice notice-error"><p>Please select a valid CSV file.</p></div>';
+        return;
+    }
+
+    $file_path = $_FILES['guest_csv']['tmp_name'];
+    $guests_data = array();
+    
+    // Read CSV file
+    if (($handle = fopen($file_path, "r")) !== FALSE) {
+        
+        // Skip header row
+        $header = fgetcsv($handle, 1000, ",");
+        
+        $row_count = 0;
+        while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+            $row_count++;
+            
+            // Map CSV data to our format
+            // CSV format: name, email, phone (skip), plus_one_name
+            $guest_data = array(
+                'name' => trim($data[0]),
+                'email' => !empty($data[1]) ? trim($data[1]) : '',
+                'plus_one_name' => !empty($data[3]) ? trim($data[3]) : ''
+            );
+            
+            // Skip empty names
+            if (empty($guest_data['name'])) {
+                continue;
+            }
+            
+            $guests_data[] = $guest_data;
+        }
+        
+        fclose($handle);
+    } else {
+        echo '<div class="notice notice-error"><p>Error: Could not read CSV file</p></div>';
+        return;
+    }
+    
+    if (empty($guests_data)) {
+        echo '<div class="notice notice-error"><p>No valid guest data found in CSV file.</p></div>';
+        return;
+    }
+    
+    // Import using bulk function
+    $results = bulk_import_guests($guests_data);
+    
+    // Display detailed results with debug info
+    echo '<div class="notice notice-info"><p>';
+    echo "<strong>Import Debug Info:</strong><br>";
+    echo "CSV rows processed: " . count($guests_data) . "<br>";
+    echo "Successful imports: " . $results['success'] . "<br>";
+    echo "Errors: " . count($results['errors']) . "<br>";
+    if (!empty($results['created_ids'])) {
+        echo "Created post IDs: " . implode(', ', $results['created_ids']) . "<br>";
+    }
+    echo '</p></div>';
+    
+    if ($results['success'] > 0) {
+        echo '<div class="notice notice-success"><p>';
+        echo "Successfully imported {$results['success']} guests!";
+        echo '</p></div>';
+    }
+    
+    if (!empty($results['errors'])) {
+        echo '<div class="notice notice-error"><p>';
+        echo "Errors encountered: " . count($results['errors']) . " guests could not be imported.<br>";
+        foreach ($results['errors'] as $i => $error) {
+            echo "Error " . ($i + 1) . ": " . $error['error'] . "<br>";
+            if ($i >= 2) {
+                echo "... and " . (count($results['errors']) - 3) . " more errors<br>";
+                break;
+            }
+        }
+        echo '</p></div>';
+    }
 }

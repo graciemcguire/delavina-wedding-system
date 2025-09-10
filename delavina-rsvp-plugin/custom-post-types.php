@@ -46,7 +46,7 @@ function register_guest_post_type() {
         ),
         'supports'              => array('title', 'custom-fields'),
         'hierarchical'          => false,
-        'public'                => false,
+        'public'                => true,
         'show_ui'               => true,
         'show_in_menu'          => true,
         'menu_position'         => 20,
@@ -64,18 +64,46 @@ function register_guest_post_type() {
     );
     register_post_type('guest', $args);
 }
-add_action('init', 'register_guest_post_type', 0);
+add_action('init', 'register_guest_post_type', 15);
+
+/**
+ * Ensure post type shows in admin menu
+ */
+function ensure_guest_menu_visibility() {
+    global $submenu, $menu;
+    
+    // Force add Guests menu if it doesn't exist
+    if (!menu_page_url('edit.php?post_type=guest', false)) {
+        add_menu_page(
+            'Guests',
+            'Guests', 
+            'manage_options',
+            'edit.php?post_type=guest',
+            '',
+            'dashicons-groups',
+            25
+        );
+    }
+}
+add_action('admin_menu', 'ensure_guest_menu_visibility', 100);
+
+/**
+ * Flush rewrite rules on activation to ensure post type is recognized
+ */
+function delavina_flush_rewrites() {
+    register_guest_post_type();
+    flush_rewrite_rules();
+}
 
 /**
  * Set default title for guest posts
  */
 function set_guest_default_title($data, $postarr) {
     if ($data['post_type'] == 'guest' && empty($data['post_title'])) {
-        $first_name = get_field('first_name', $postarr['ID']) ?: '';
-        $last_name = get_field('last_name', $postarr['ID']) ?: '';
+        $name = get_field('name', $postarr['ID']) ?: '';
         
-        if ($first_name || $last_name) {
-            $data['post_title'] = trim($first_name . ' ' . $last_name);
+        if ($name) {
+            $data['post_title'] = trim($name);
         } else {
             $data['post_title'] = 'Guest #' . time();
         }
@@ -89,15 +117,12 @@ add_filter('wp_insert_post_data', 'set_guest_default_title', 10, 2);
  */
 function update_guest_title_on_acf_save($post_id) {
     if (get_post_type($post_id) == 'guest') {
-        $first_name = get_field('first_name', $post_id);
-        $last_name = get_field('last_name', $post_id);
+        $name = get_field('name', $post_id);
         
-        $new_title = trim($first_name . ' ' . $last_name);
-        
-        if (!empty($new_title)) {
+        if (!empty($name)) {
             wp_update_post(array(
                 'ID' => $post_id,
-                'post_title' => $new_title
+                'post_title' => trim($name)
             ));
         }
     }

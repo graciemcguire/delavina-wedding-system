@@ -3,7 +3,7 @@
  * Plugin Name: Delavina Wedding RSVP System
  * Plugin URI: https://delavina.com
  * Description: A complete wedding RSVP system with guest management and GraphQL API for headless WordPress
- * Version: 2.0.0
+ * Version: 2.1.9
  * Author: Delavina
  * License: GPL v2 or later
  * Text Domain: delavina-rsvp
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('DELAVINA_RSVP_VERSION', '1.0.0');
+define('DELAVINA_RSVP_VERSION', '2.1.9');
 define('DELAVINA_RSVP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('DELAVINA_RSVP_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -58,6 +58,7 @@ class DellavinaRSVPPlugin {
         require_once DELAVINA_RSVP_PLUGIN_DIR . 'acf-field-groups.php';
         require_once DELAVINA_RSVP_PLUGIN_DIR . 'helper-functions.php';
         require_once DELAVINA_RSVP_PLUGIN_DIR . 'graphql-config.php';
+        require_once DELAVINA_RSVP_PLUGIN_DIR . 'migration-script.php';
     }
 
     /**
@@ -265,7 +266,7 @@ function delavina_rsvp_import_page() {
 }
 
 /**
- * Handle CSV import
+ * Handle CSV import - creates parties with guests
  */
 function delavina_handle_csv_import() {
     if (!isset($_FILES['guest_csv']) || $_FILES['guest_csv']['error'] !== UPLOAD_ERR_OK) {
@@ -313,29 +314,29 @@ function delavina_handle_csv_import() {
         return;
     }
     
-    // Import using bulk function
+    // Import using bulk function (now creates parties with guests)
     $results = bulk_import_guests($guests_data);
     
     // Display detailed results with debug info
     echo '<div class="notice notice-info"><p>';
     echo "<strong>Import Debug Info:</strong><br>";
     echo "CSV rows processed: " . count($guests_data) . "<br>";
-    echo "Successful imports: " . $results['success'] . "<br>";
+    echo "Successful party imports: " . $results['success'] . "<br>";
     echo "Errors: " . count($results['errors']) . "<br>";
     if (!empty($results['created_ids'])) {
-        echo "Created post IDs: " . implode(', ', $results['created_ids']) . "<br>";
+        echo "Created party IDs: " . implode(', ', $results['created_ids']) . "<br>";
     }
     echo '</p></div>';
     
     if ($results['success'] > 0) {
         echo '<div class="notice notice-success"><p>';
-        echo "Successfully imported {$results['success']} guests!";
+        echo "Successfully imported {$results['success']} parties with their guests!";
         echo '</p></div>';
     }
     
     if (!empty($results['errors'])) {
         echo '<div class="notice notice-error"><p>';
-        echo "Errors encountered: " . count($results['errors']) . " guests could not be imported.<br>";
+        echo "Errors encountered: " . count($results['errors']) . " parties could not be imported.<br>";
         foreach ($results['errors'] as $i => $error) {
             echo "Error " . ($i + 1) . ": " . $error['error'] . "<br>";
             if ($i >= 2) {

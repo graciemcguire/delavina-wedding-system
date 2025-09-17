@@ -9,6 +9,64 @@ if (!defined('ABSPATH')) {
 }
 
 /**
+ * Register Party Custom Post Type
+ */
+function register_party_post_type() {
+    $args = array(
+        'label'                 => __('Parties', 'delavina'),
+        'description'           => __('Wedding parties and their RSVP information', 'delavina'),
+        'labels'                => array(
+            'name'                  => _x('Parties', 'Post Type General Name', 'delavina'),
+            'singular_name'         => _x('Party', 'Post Type Singular Name', 'delavina'),
+            'menu_name'             => __('Parties', 'delavina'),
+            'name_admin_bar'        => __('Party', 'delavina'),
+            'archives'              => __('Party Archives', 'delavina'),
+            'attributes'            => __('Party Attributes', 'delavina'),
+            'parent_item_colon'     => __('Parent Party:', 'delavina'),
+            'all_items'             => __('All Parties', 'delavina'),
+            'add_new_item'          => __('Add New Party', 'delavina'),
+            'add_new'               => __('Add New', 'delavina'),
+            'new_item'              => __('New Party', 'delavina'),
+            'edit_item'             => __('Edit Party', 'delavina'),
+            'update_item'           => __('Update Party', 'delavina'),
+            'view_item'             => __('View Party', 'delavina'),
+            'view_items'            => __('View Parties', 'delavina'),
+            'search_items'          => __('Search Party', 'delavina'),
+            'not_found'             => __('Not found', 'delavina'),
+            'not_found_in_trash'    => __('Not found in Trash', 'delavina'),
+            'featured_image'        => __('Featured Image', 'delavina'),
+            'set_featured_image'    => __('Set featured image', 'delavina'),
+            'remove_featured_image' => __('Remove featured image', 'delavina'),
+            'use_featured_image'    => __('Use as featured image', 'delavina'),
+            'insert_into_item'      => __('Insert into party', 'delavina'),
+            'uploaded_to_this_item' => __('Uploaded to this party', 'delavina'),
+            'items_list'            => __('Parties list', 'delavina'),
+            'items_list_navigation' => __('Parties list navigation', 'delavina'),
+            'filter_items_list'     => __('Filter parties list', 'delavina'),
+        ),
+        'supports'              => array('title', 'custom-fields'),
+        'hierarchical'          => false,
+        'public'                => true,
+        'show_ui'               => true,
+        'show_in_menu'          => true,
+        'menu_position'         => 19,
+        'menu_icon'             => 'dashicons-groups',
+        'show_in_admin_bar'     => true,
+        'show_in_nav_menus'     => false,
+        'can_export'            => true,
+        'has_archive'           => false,
+        'exclude_from_search'   => true,
+        'publicly_queryable'    => false,
+        'capability_type'       => 'post',
+        'show_in_graphql'       => true,
+        'graphql_single_name'   => 'party',
+        'graphql_plural_name'   => 'parties',
+    );
+    register_post_type('party', $args);
+}
+add_action('init', 'register_party_post_type', 0);
+
+/**
  * Register Guest Custom Post Type
  */
 function register_guest_post_type() {
@@ -64,33 +122,14 @@ function register_guest_post_type() {
     );
     register_post_type('guest', $args);
 }
-add_action('init', 'register_guest_post_type', 15);
+add_action('init', 'register_guest_post_type', 0);
 
-/**
- * Ensure post type shows in admin menu
- */
-function ensure_guest_menu_visibility() {
-    global $submenu, $menu;
-    
-    // Force add Guests menu if it doesn't exist
-    if (!menu_page_url('edit.php?post_type=guest', false)) {
-        add_menu_page(
-            'Guests',
-            'Guests', 
-            'manage_options',
-            'edit.php?post_type=guest',
-            '',
-            'dashicons-groups',
-            25
-        );
-    }
-}
-add_action('admin_menu', 'ensure_guest_menu_visibility', 100);
 
 /**
  * Flush rewrite rules on activation to ensure post type is recognized
  */
 function delavina_flush_rewrites() {
+    register_party_post_type();
     register_guest_post_type();
     flush_rewrite_rules();
 }
